@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-tw">
+<head>
+    <meta charset="utf-8">
+    <title>通勤儀表板 | Commute Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Maps API Key 動態載入 -->
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.6);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dest-color: #f472b6;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15) 0%, transparent 50%), radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+        .container { width: 100%; max-width: 650px; }
+        header { margin-bottom: 2rem; text-align: center; }
+        h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+        .subtitle { color: var(--text-secondary); font-size: 0.9rem; }
+        .status-good { color: var(--success); }
+        .status-warn { color: var(--warning); }
+        .status-err { color: var(--danger); }
+        .status-neutral { color: var(--text-secondary); }
+        .dest-time { color: var(--dest-color); font-weight: 700; }
+        footer { margin-top: 2rem; text-align: center; font-size: 0.8rem; color: var(--text-secondary); }
+        .loader { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.1); border-radius: 50%; border-top-color: var(--accent-primary); animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-msg { color: var(--danger); text-align: center; padding: 1rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px; margin-bottom: 1rem; display: none; }
+        
+        .list-header { display: flex; justify-content: space-between; padding: 0 1.2rem 0.5rem; color: var(--text-secondary); font-size: 0.85rem; border-bottom: 1px solid var(--card-border); margin-bottom: 0.5rem; }
+        .card-row { display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1.2rem; background: var(--card-bg); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid var(--card-border); }
+        
+        /* Toggle Switch Styles */
+        .toggle-container {
+            display: flex;
+            position: relative;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 20px;
+            padding: 4px;
+            margin: 1rem auto 0;
+            border: 1px solid var(--card-border);
+            width: 180px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .toggle-bg {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            left: 4px;
+            width: calc(50% - 4px);
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 16px;
+            transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            z-index: 1;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .toggle-option {
+            flex: 1;
+            text-align: center;
+            padding: 6px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            z-index: 2;
+            transition: color 0.3s ease;
+            cursor: pointer;
+        }
+        .toggle-option.active {
+            color: #fff;
+        }
+        .toggle-container[data-mode="afternoon"] .toggle-bg {
+            transform: translateX(100%);
+        }
+        
+        /* Setup UI */
+        .setup-container {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .setup-container h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--accent-primary);
+        }
+        .setup-container p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 0.3rem;
+            color: var(--text-secondary);
+        }
+        .input-group input {
+            width: 100%;
+            padding: 0.6rem;
+            border-radius: 4px;
+            border: 1px solid var(--card-border);
+            background: rgba(15, 23, 42, 0.8);
+            color: #fff;
+            font-family: inherit;
+        }
+        .btn-save {
+            width: 100%;
+            padding: 0.8rem;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1 id="page-title">通勤儀表板</h1>
+        <div class="subtitle" id="time-indicator">載入中...</div>
+        <div class="toggle-container" id="toggle-container" data-mode="morning">
+            <div class="toggle-bg"></div>
+            <div class="toggle-option active" id="toggle-morning" onclick="setMode('morning')">上班 (去程)</div>
+            <div class="toggle-option" id="toggle-afternoon" onclick="setMode('afternoon')">下班 (回程)</div>
+        </div>
+    </header>
+
+    <div id="error-container" class="error-msg"></div>
+
+    <div id="setup-container" class="setup-container">
+        <h2>安全金鑰設定</h2>
+        <p>此網頁為純前端無伺服器架構，您的金鑰將僅儲存於本設備的瀏覽器中，絕對不會上傳至任何公開網路，請安心填寫。</p>
+        <form onsubmit="event.preventDefault(); saveKeysAndStart();">
+            <div class="input-group">
+                <label>Google Maps API Key</label>
+                <input type="text" id="input-gmaps" required placeholder="AIzaSy...">
+            </div>
+            <div class="input-group">
+                <label>TDX Client ID (視為帳號)</label>
+                <input type="text" id="input-tdx-id" autocomplete="username" required>
+            </div>
+            <div class="input-group">
+                <label>TDX Client Secret (視為密碼)</label>
+                <input type="password" id="input-tdx-secret" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn-save">儲存並啟動儀表板</button>
+        </form>
+    </div>
+
+    <div id="options-container" style="display: none;">
+        <div style="text-align: center; padding: 2rem;"><div class="loader"></div></div>
+    </div>
+
+    <footer>
+        最後更新時間：<span id="update-time">--:--:--</span><br>
+        <span id="google-api-status" style="font-size: 0.75rem; margin-top: 8px; display: inline-block;">檢查 Google API 狀態中...</span>
+    </footer>
+</div>
+
+<script>
+    // Config values are loaded from localStorage
+    
+    // Precise Coordinates (僅保留大眾運輸站點，住家與公司精確座標已移除以保護隱私)
+    
+    const LOC_57_HOME = { lat: 25.008260, lng: 121.520646 };
+    const LOC_57_CO = { lat: 25.008390, lng: 121.465840 };
+    const LOC_897_BAOPING = { lat: 25.005904, lng: 121.510771 };
+    const LOC_897_CO = { lat: 25.008390, lng: 121.465840 };
+    
+    const LOC_UBIKE_HOME = { lat: 25.002870, lng: 121.520700 };
+    const LOC_UBIKE_CO = { lat: 25.007550, lng: 121.468230 };
+    
+    const LOC_MRT_DINGXI = { lat: 25.012100, lng: 121.515400 };
+    const LOC_MRT_FUZHONG = { lat: 25.008400, lng: 121.459400 };
+    const LOC_MRT_YONGAN = { lat: 25.001400, lng: 121.511000 };
+
+    const BUS_57_HOME = '127734'; // 永和區公所(竹林路)
+    const BUS_57_CO = '185330'; // 民族區運路口
+    const BUS_897_HOME = '181098'; // 保平路口 (Morning Transfer)
+    const BUS_897_CO = '181120'; // 民族區運路口 (Afternoon Transfer)
+    
+    const UBIKE_HOME = '500210031'; // YouBike2.0_永和國中(國中路)
+    const UBIKE_HOME_BACKUP = '500210009'; // YouBike2.0_福和國中
+
+    const UBIKE_CO = '500218008'; // YouBike2.0_中華電信學院
+    const UBIKE_CO_BACKUP = '500218038'; // YouBike2.0_板橋第一運動場
+
+    const UBIKE_YONGZHEN = '500210033'; // YouBike2.0_永貞水源街口
+    const UBIKE_YONGZHEN_BACKUP = '500210017'; // YouBike2.0_永和自由街
+    const UBIKE_DINGXI = '500210046'; // YouBike2.0_捷運頂溪站(中興街)
+
+    let isMorning = true;
+    let mapService = null;
+    let googleApiStatus = 'unknown';
+
+    // Plans Definition
+    const plans = {
+        morning: [
+            { id: 1, title: '57 公車直達', station: '站牌：永和區公所(竹林路)', firstLeg: 'bus_57', gmMode: 'TRANSIT', isBus: true, orig: LOC_57_HOME, dest: LOC_57_CO, staticMins: 55, extraMins: 15, preTransitMins: 5 },
+            { id: 2, title: 'Ubike 轉 897 公車', station: '轉乘：保平路口搭897', firstLeg: 'ubike_897', gmMode: 'TRANSIT', isBus: true, orig: LOC_897_BAOPING, dest: LOC_897_CO, staticMins: 55, extraMins: 23, preTransitMins: 13, ubikeStart: UBIKE_HOME, ubikeDest: UBIKE_YONGZHEN, ubikeStartBackup: UBIKE_HOME_BACKUP, startPenalty: 3, ubikeDestBackup: UBIKE_YONGZHEN_BACKUP, destPenalty: 10 },
+            { id: 3, title: 'Ubike + 捷運橘線轉藍線', station: '借車：YouBike 永和國中(國中路)', firstLeg: 'ubike', gmMode: null, orig: LOC_UBIKE_HOME, dest: LOC_MRT_DINGXI, staticMins: 53, extraMins: 58, ubikeStart: UBIKE_HOME, ubikeDest: UBIKE_DINGXI, ubikeStartBackup: UBIKE_HOME_BACKUP, startPenalty: 3 },
+            { id: 4, title: 'Ubike 直達', station: '借車：YouBike 永和國中(國中路)', firstLeg: 'ubike', gmMode: 'BICYCLING', orig: LOC_UBIKE_HOME, dest: LOC_UBIKE_CO, staticMins: 45, extraMins: 8, ubikeStart: UBIKE_HOME, ubikeDest: UBIKE_CO, ubikeStartBackup: UBIKE_HOME_BACKUP, startPenalty: 3, ubikeDestBackup: UBIKE_CO_BACKUP, destPenalty: 8 },
+            { id: 5, title: '步行 + 捷運橘線轉藍線', station: '搭乘：捷運頂溪站', firstLeg: 'mrt', staticMins: 58, extraMins: 63 } // 捷運不受塞車影響
+        ],
+        afternoon: [
+            { id: 1, title: '57 公車直達', station: '站牌：民族區運路口', firstLeg: 'bus_57', gmMode: 'TRANSIT', isBus: true, orig: LOC_57_CO, dest: LOC_57_HOME, staticMins: 55, extraMins: 9, preTransitMins: 7 },
+            { id: 2, title: '897 公車 轉 Ubike', station: '站牌：民族區運路口', firstLeg: 'bus_897', gmMode: 'TRANSIT', isBus: true, orig: LOC_897_CO, dest: LOC_897_BAOPING, staticMins: 55, extraMins: 17, preTransitMins: 7, ubikeStart: UBIKE_YONGZHEN, ubikeDest: UBIKE_HOME, ubikeStartBackup: UBIKE_YONGZHEN_BACKUP, startPenalty: 10, ubikeDestBackup: UBIKE_HOME_BACKUP, destPenalty: 3 },
+            { id: 3, title: '捷運藍線轉橘線 + Ubike', station: '搭乘：捷運府中站', firstLeg: 'mrt', staticMins: 53, extraMins: 58, ubikeStart: UBIKE_DINGXI, ubikeDest: UBIKE_HOME, ubikeDestBackup: UBIKE_HOME_BACKUP, destPenalty: 3 },
+            { id: 4, title: 'Ubike 直達', station: '借車：YouBike 中華電信學院', firstLeg: 'ubike_co', gmMode: 'BICYCLING', orig: LOC_UBIKE_CO, dest: LOC_UBIKE_HOME, staticMins: 45, extraMins: 8, ubikeStart: UBIKE_CO, ubikeDest: UBIKE_HOME, ubikeStartBackup: UBIKE_CO_BACKUP, startPenalty: 8, ubikeDestBackup: UBIKE_HOME_BACKUP, destPenalty: 3 },
+            { id: 5, title: '捷運藍線轉橘線 + 步行', station: '搭乘：捷運府中站', firstLeg: 'mrt', staticMins: 48, extraMins: 53 }
+        ]
+    };
+
+    let cachedToken = null;
+    let tokenExpiry = 0;
+
+    async function getAuthToken() {
+        if (cachedToken && Date.now() < tokenExpiry) {
+            return cachedToken;
+        }
+        
+        const clientId = localStorage.getItem('TDX_ID');
+        const clientSecret = localStorage.getItem('TDX_SECRET');
+        
+        if (!clientId || !clientSecret) {
+            throw new Error('TDX Auth Keys missing');
+        }
+
+        const url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token";
+        const params = new URLSearchParams();
+        params.append('grant_type', 'client_credentials');
+        params.append('client_id', clientId);
+        params.append('client_secret', clientSecret);
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params });
+        if (!res.ok) throw new Error('TDX Auth failed');
+        const data = await res.json();
+        cachedToken = data.access_token;
+        tokenExpiry = Date.now() + (data.expires_in - 60) * 1000; // cache until 60s before expiry
+        return cachedToken;
+    }
+
+    let seqCache = {};
+    try {
+        const stored = localStorage.getItem('tdx_seq_cache');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Check if cache is younger than 7 days (7 * 24 * 60 * 60 * 1000 = 604800000 ms)
+            if (parsed.timestamp && (Date.now() - parsed.timestamp < 604800000)) {
+                seqCache = parsed.data || {};
+            } else {
+                localStorage.removeItem('tdx_seq_cache'); // Expired, clear it
+            }
+        }
+    } catch(e) {}
+
+    async function fetchRouteETA(token, city, routeName) {
+        try {
+            const urlETA = `https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/${city}/${routeName}?%24format=JSON`;
+            const resETA = await fetch(urlETA, { headers: { 'authorization': `Bearer ${token}` } });
+            if (!resETA.ok) return null;
+            return await resETA.json();
+        } catch (e) {
+            console.error(e);
+            return null;
+        }
+    }
+
+    async function processBusStopETA(etaData, city, routeName, stopId, token) {
+        if (!etaData) return null;
+        try {
+            const myStop = etaData.find(x => x.StopID === stopId);
+            if (!myStop || myStop.EstimateTime === undefined || myStop.EstimateTime < 0) return myStop || null;
+
+            const dir = myStop.Direction;
+            const cacheKey = `${city}_${routeName}_${dir}`;
+            let stops = seqCache[cacheKey];
+
+            if (!stops) {
+                const urlSeq = `https://tdx.transportdata.tw/api/basic/v2/Bus/DisplayStopOfRoute/City/${city}/${routeName}?%24filter=Direction%20eq%20${dir}&%24format=JSON`;
+                const resSeq = await fetch(urlSeq, { headers: { 'authorization': `Bearer ${token}` } });
+                if (!resSeq.ok) return myStop;
+                const seqData = await resSeq.json();
+                if (!seqData || seqData.length === 0) return myStop;
+                stops = seqData[0].Stops;
+                seqCache[cacheKey] = stops;
+                try {
+                    localStorage.setItem('tdx_seq_cache', JSON.stringify({
+                        timestamp: Date.now(),
+                        data: seqCache
+                    }));
+                } catch (e) {
+                    console.warn('localStorage not available', e);
+                }
+            }
+            const etaMap = {};
+            etaData.forEach(x => { if (x.Direction === dir) etaMap[x.StopUID] = x.EstimateTime; });
+
+            const myIndex = stops.findIndex(x => x.StopID === stopId);
+            if (myIndex === -1) return myStop;
+
+            let prevETA = myStop.EstimateTime;
+            let nextNextETA = -1;
+
+            for (let i = myIndex - 1; i >= 0; i--) {
+                const currentETA = etaMap[stops[i].StopUID];
+                if (currentETA === undefined || currentETA < 0) continue;
+                
+                if (currentETA > prevETA + 180) {
+                    nextNextETA = currentETA;
+                    break;
+                }
+                prevETA = currentETA;
+            }
+
+            if (nextNextETA !== -1) {
+                myStop.NextBusEstimateTime = Math.max(0, myStop.EstimateTime + nextNextETA - 60);
+            }
+            
+            myStop.EstimateTime = Math.max(0, myStop.EstimateTime - 60); // 1-min safety buffer
+
+            return myStop;
+        } catch (e) {
+            console.error(e);
+            return null;
+        }
+    }
+
+    async function fetchUbikes(token, stationIds) {
+        if (!stationIds || stationIds.length === 0) return {};
+        const filterStr = stationIds.map(id => `StationID eq '${id}'`).join(' or ');
+        const url = `https://tdx.transportdata.tw/api/basic/v2/Bike/Availability/City/NewTaipei?%24filter=${encodeURIComponent(filterStr)}&%24format=JSON`;
+        const res = await fetch(url, { headers: { 'authorization': `Bearer ${token}` } });
+        if (!res.ok) return {};
+        const data = await res.json();
+        const result = {};
+        data.forEach(d => { result[d.StationID] = d; });
+        return result;
+    }
+
+    function getCommuteTime() {
+        const now = new Date();
+        const h = now.getHours();
+        const d = new Date();
+        if (isMorning) {
+            if (h >= 7 && h <= 9) return now; // During morning rush, use current time
+            d.setHours(8, 0, 0, 0); // Otherwise default to 8:00 AM
+            if (h > 9) d.setDate(d.getDate() + 1); // Tomorrow 8:00 AM
+            return d;
+        } else {
+            if (h >= 17 && h <= 19) return now; // During evening rush, use current time
+            d.setHours(18, 0, 0, 0); // Otherwise default to 6:00 PM
+            if (h > 19) d.setDate(d.getDate() + 1); // Tomorrow 6:00 PM
+            return d;
+        }
+    }
+
+    async function getGoogleTravelTimeSec(orig, dest, mode, staticMins, extraMins, isBus) {
+        const fallback = staticMins * 60;
+        const extraSec = (extraMins || 0) * 60;
+        if (!window.google || !window.google.maps) {
+            if (googleApiStatus !== 'ok') googleApiStatus = 'error';
+            return fallback;
+        }
+        
+        if (!window.directionsService) window.directionsService = new google.maps.DirectionsService();
+        
+        return new Promise((resolve) => {
+            const req = {
+                origin: orig,
+                destination: dest,
+                travelMode: mode
+            };
+            
+            if (mode === 'TRANSIT') {
+                req.transitOptions = {
+                    departureTime: getCommuteTime(),
+                    modes: [window.google.maps.TransitMode ? window.google.maps.TransitMode.BUS : 'BUS']
+                };
+            }
+            
+            window.directionsService.route(req, (response, status) => {
+                if (status === 'OK' && response.routes && response.routes.length > 0) {
+                    googleApiStatus = 'ok';
+                    let duration = 0;
+                    
+                    if (mode === 'TRANSIT') {
+                        // Extract only the TRANSIT (bus ride) time to avoid double counting wait times
+                        let foundTransit = false;
+                        response.routes[0].legs[0].steps.forEach(step => {
+                            if (step.travel_mode === 'TRANSIT' && step.duration) {
+                                duration += step.duration.value;
+                                foundTransit = true;
+                            }
+                        });
+                        // If for some reason it didn't find a bus step, fallback to total leg duration
+                        if (!foundTransit) {
+                            duration = response.routes[0].legs[0].duration.value;
+                        }
+                    } else {
+                        // BICYCLING
+                        // 增加 35% 緩衝時間，考量 Ubike 重量、紅綠燈與未計算的即時車流
+                        duration = Math.ceil(response.routes[0].legs[0].duration.value * 1.35);
+                    }
+                    
+                    resolve(duration + extraSec);
+                } else {
+                    if (googleApiStatus !== 'ok') googleApiStatus = 'error';
+                    resolve(fallback); // fallback
+                }
+            });
+        });
+    }
+
+    function formatTime(seconds) {
+        if (seconds === undefined || seconds < 0) return null;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}分${s}秒`;
+    }
+
+    function getAbsoluteTimeStr(baseDateStr, addSeconds) {
+        let date = baseDateStr ? new Date(baseDateStr) : new Date();
+        if (addSeconds) date.setSeconds(date.getSeconds() + addSeconds);
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+    }
+
+    function getDestArrivalStr(baseDateStr, waitSec, travelSec) {
+        let date = baseDateStr ? new Date(baseDateStr) : new Date();
+        if (waitSec) date.setSeconds(date.getSeconds() + waitSec);
+        if (travelSec) date.setSeconds(date.getSeconds() + travelSec);
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+    }
+
+    async function enrichPlansWithGoogleTime(plansToRender) {
+        // Fetch google times in parallel
+        const promises = plansToRender.map(async p => {
+            if (p.gmMode) {
+                p.actualTravelSec = await getGoogleTravelTimeSec(p.orig, p.dest, p.gmMode, p.staticMins, p.extraMins, p.isBus);
+            } else {
+                p.actualTravelSec = (p.extraMins || p.staticMins || 50) * 60;
+            }
+        });
+        await Promise.all(promises);
+    }
+
+    function getBusDataObj(busData, travelTimeSec, preTransitMins, headwayMins = 15) {
+        if (!busData) return { waitText: '無資料', leaveText: '--:--', arrivalText: '--:--:--', destText: '--:--', class: 'status-err', sortValue: 999999 };
+        const status = busData.StopStatus;
+        let eta = busData.EstimateTime;
+        const updateTime = busData.SrcUpdateTime;
+
+        if (eta !== undefined && eta >= 0) {
+            let isNextNext = false;
+            let preSec = preTransitMins !== undefined ? preTransitMins * 60 : 0;
+            
+            if (eta < preSec) {
+                if (busData.NextBusEstimateTime !== undefined) {
+                    eta = busData.NextBusEstimateTime; // Use precise calculated time
+                } else {
+                    eta += headwayMins * 60; // Fallback
+                }
+                isNextNext = true;
+            }
+
+            const leaveSec = eta - preSec;
+
+            return { 
+                waitText: formatTime(eta) + (isNextNext ? '<br><span style="font-size:0.75rem;color:var(--text-secondary);font-weight:normal">(下一班)</span>' : ''),
+                leaveText: getDestArrivalStr(updateTime, leaveSec, 0),
+                arrivalText: getAbsoluteTimeStr(updateTime, eta),
+                destText: getDestArrivalStr(updateTime, eta, travelTimeSec),
+                class: isNextNext ? 'status-warn' : 'status-good',
+                sortValue: leaveSec
+            };
+        }
+
+        if (status === 1) return { waitText: '尚未發車', leaveText: '--:--', arrivalText: '尚未發車', destText: '--:--', class: 'status-neutral', sortValue: 888888 };
+        if (status === 2 || status === 3 || status === 4) {
+            const txt = status === 2 ? '交管不停靠' : (status === 3 ? '末班車駛離' : '今日未營運');
+            return { waitText: txt, leaveText: '--:--', arrivalText: '--:--:--', destText: '--:--', class: 'status-err', sortValue: 999999 };
+        }
+        return { waitText: '無資料', leaveText: '--:--', arrivalText: '--:--:--', destText: '--:--', class: 'status-err', sortValue: 999999 };
+    }
+
+    function resolveUbike(plan, dataMap) {
+        let isStartBackup = false;
+        let isDestBackup = false;
+        let penalty = 0;
+        let backupName = '';
+
+        let uData = plan.ubikeStart && dataMap.ubikeData ? dataMap.ubikeData[plan.ubikeStart] : null;
+        let destUData = plan.ubikeDest && dataMap.ubikeData ? dataMap.ubikeData[plan.ubikeDest] : null;
+
+        const UBIKE_NAMES = {
+            '500210009': '福和國中',
+            '500210017': '永和自由街',
+            '500218038': '板橋第一運動場'
+        };
+
+        if (uData && uData.AvailableRentBikes === 0 && plan.ubikeStartBackup) {
+            let backupData = dataMap.ubikeData[plan.ubikeStartBackup];
+            if (backupData) {
+                uData = backupData;
+                isStartBackup = true;
+                penalty += plan.startPenalty || 0;
+                backupName += `改至${UBIKE_NAMES[plan.ubikeStartBackup]}借車 `;
+            }
+        }
+
+        if (destUData && destUData.AvailableReturnBikes === 0 && plan.ubikeDestBackup) {
+            let backupData = dataMap.ubikeData[plan.ubikeDestBackup];
+            if (backupData) {
+                destUData = backupData;
+                isDestBackup = true;
+                penalty += plan.destPenalty || 0;
+                backupName += `改至${UBIKE_NAMES[plan.ubikeDestBackup]}還車 `;
+            }
+        }
+        
+        return { uData, destUData, isStartBackup, isDestBackup, penalty, backupName: backupName.trim() };
+    }
+
+    function renderCards(dataMap, currentPlans) {
+        const container = document.getElementById('options-container');
+        
+        currentPlans.forEach(plan => {
+            if (plan.firstLeg === 'bus_57') {
+                const b = getBusDataObj(dataMap.bus_57, plan.actualTravelSec, plan.preTransitMins, 15);
+                plan.waitText = b.waitText; plan.leaveText = b.leaveText; plan.arrivalText = b.arrivalText; plan.destText = b.destText;
+                plan.statusClass = b.class; plan.sortValue = b.sortValue;
+
+            } else if (plan.firstLeg === 'bus_897') {
+                const headway897 = isMorning ? 30 : 50;
+                const b = getBusDataObj(dataMap.bus_897, plan.actualTravelSec, plan.preTransitMins, headway897);
+                plan.waitText = b.waitText; plan.leaveText = b.leaveText; plan.arrivalText = b.arrivalText; plan.destText = b.destText;
+                plan.statusClass = b.class; plan.sortValue = b.sortValue;
+
+            } else if (plan.firstLeg === 'ubike_897') {
+                const uStatus = resolveUbike(plan, dataMap);
+                const { uData, destUData, penalty, backupName } = uStatus;
+                
+                const headway897 = isMorning ? 30 : 50;
+                const b = getBusDataObj(dataMap.bus_897, plan.actualTravelSec, plan.preTransitMins + penalty, headway897);
+                let bikes = 0;
+                if (uData && uData.AvailableRentBikes !== undefined) bikes = uData.AvailableRentBikes;
+                
+                let returnAlert = '';
+                if (destUData && destUData.AvailableReturnBikes !== undefined) {
+                    if (destUData.AvailableReturnBikes === 0) returnAlert = `<br><span style="font-size:0.75rem;color:var(--status-err);font-weight:bold">🛑 滿站無法還車</span>`;
+                    else if (destUData.AvailableReturnBikes <= 2) returnAlert = `<br><span style="font-size:0.75rem;color:var(--status-warn);font-weight:bold">⚠️ 剩 ${destUData.AvailableReturnBikes} 空柱</span>`;
+                }
+                
+                let backupAlert = backupName ? `<br><span style="font-size:0.75rem;color:var(--status-warn);font-weight:bold">⚠️ ${backupName}(+${penalty}分)</span>` : '';
+                
+                if (bikes > 0) {
+                    plan.waitText = `${b.waitText}<br><span style="font-size:0.75rem;color:var(--text-secondary);font-weight:normal">(借: ${bikes}台)</span>${returnAlert}${backupAlert}`;
+                    plan.leaveText = b.leaveText;
+                    plan.arrivalText = b.arrivalText;
+                    plan.destText = b.destText;
+                    plan.statusClass = b.class;
+                    plan.sortValue = b.sortValue;
+                } else {
+                    plan.waitText = '無Ubike可借'; plan.leaveText = '--:--'; plan.arrivalText = '--:--:--'; plan.destText = '--:--';
+                    plan.statusClass = 'status-err'; plan.sortValue = 999999;
+                }
+            } else if (plan.firstLeg === 'ubike' || plan.firstLeg === 'ubike_co') {
+                const uStatus = resolveUbike(plan, dataMap);
+                const { uData, destUData, penalty, backupName } = uStatus;
+                
+                let returnAlert = '';
+                if (destUData && destUData.AvailableReturnBikes !== undefined) {
+                    if (destUData.AvailableReturnBikes === 0) returnAlert = `<br><span style="font-size:0.75rem;color:var(--status-err);font-weight:bold">🛑 滿站無法還車</span>`;
+                    else if (destUData.AvailableReturnBikes <= 2) returnAlert = `<br><span style="font-size:0.75rem;color:var(--status-warn);font-weight:bold">⚠️ 剩 ${destUData.AvailableReturnBikes} 空柱</span>`;
+                }
+
+                let backupAlert = backupName ? `<br><span style="font-size:0.75rem;color:var(--status-warn);font-weight:bold">⚠️ ${backupName}(+${penalty}分)</span>` : '';
+
+                if (uData && uData.AvailableRentBikes !== undefined) {
+                    const count = uData.AvailableRentBikes;
+                    plan.waitText = (count > 0 ? `餘 ${count} 台` : '無車可借') + returnAlert + backupAlert;
+                    plan.leaveText = count > 0 ? '隨時' : '--:--';
+                    plan.arrivalText = count > 0 ? '馬上出發' : '--:--:--';
+                    plan.destText = count > 0 ? getDestArrivalStr(null, 0, plan.actualTravelSec + penalty * 60) : '--:--';
+                    plan.statusClass = count > 3 ? 'status-good' : (count > 0 ? 'status-warn' : 'status-err');
+                    plan.sortValue = count > 0 ? 0 : 999999;
+                } else {
+                    plan.waitText = '無資料'; plan.leaveText = '--:--'; plan.arrivalText = '--:--:--'; plan.destText = '--:--'; plan.statusClass = 'status-err'; plan.sortValue = 999999;
+                }
+            } else if (plan.firstLeg === 'mrt') {
+                const uStatus = resolveUbike(plan, dataMap);
+                const { uData, destUData, penalty, backupName } = uStatus;
+                
+                let rentAlert = '';
+                if (uData && uData.AvailableRentBikes !== undefined) {
+                    if (uData.AvailableRentBikes === 0) rentAlert = `<br><span style="font-size:0.75rem;color:var(--status-err);font-weight:bold">🛑 無車可借</span>`;
+                    else rentAlert = `<br><span style="font-size:0.75rem;color:var(--text-secondary);font-weight:normal">(借: ${uData.AvailableRentBikes}台)</span>`;
+                }
+
+                let returnAlert = '';
+                if (destUData && destUData.AvailableReturnBikes !== undefined) {
+                    if (destUData.AvailableReturnBikes === 0) returnAlert = `<br><span style="font-size:0.75rem;color:var(--status-err);font-weight:bold">🛑 滿站無法還車</span>`;
+                    else if (destUData.AvailableReturnBikes <= 2) returnAlert = `<br><span style="font-size:0.75rem;color:var(--status-warn);font-weight:bold">⚠️ 剩 ${destUData.AvailableReturnBikes} 空柱</span>`;
+                }
+                
+                let backupAlert = backupName ? `<br><span style="font-size:0.75rem;color:var(--status-warn);font-weight:bold">⚠️ ${backupName}(+${penalty}分)</span>` : '';
+
+                plan.waitText = `隨時搭乘${rentAlert}${returnAlert}${backupAlert}`;
+                plan.leaveText = '隨時';
+                plan.arrivalText = '進站後即搭';
+                plan.destText = getDestArrivalStr(null, 3 * 60, plan.actualTravelSec + penalty * 60);
+                plan.statusClass = (uData && uData.AvailableRentBikes === 0) ? 'status-err' : 'status-good';
+                plan.sortValue = (uData && uData.AvailableRentBikes === 0) ? 999999 : 0; // 隨時出發
+            }
+        });
+
+        currentPlans.sort((a, b) => a.sortValue - b.sortValue);
+
+        container.innerHTML = `
+            <div class="list-header">
+                <span style="flex: 2.2;">方案與站點</span>
+                <span style="flex: 1.3; text-align: center;">距離下一班</span>
+                <span style="flex: 1.2; text-align: center;">最晚出門</span>
+                <span style="flex: 1.2; text-align: center;">搭車時刻</span>
+                <span style="flex: 1.2; text-align: right;">抵達終點</span>
+            </div>
+        `;
+
+        currentPlans.forEach((plan) => {
+            const row = document.createElement('div');
+            row.className = 'card-row';
+            row.innerHTML = `
+                <div style="flex: 2.2;">
+                    <div style="font-weight: 600; font-size: 0.95rem;">${plan.title}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">${plan.station}</div>
+                </div>
+                <div style="flex: 1.3; text-align: center; font-weight: 700;" class="${plan.statusClass}">${plan.waitText}</div>
+                <div style="flex: 1.2; text-align: center; color: var(--text-primary); font-family: monospace; font-size: 0.95rem; font-weight: 600;">${plan.leaveText}</div>
+                <div style="flex: 1.2; text-align: center; color: var(--text-primary); font-family: monospace; font-size: 0.95rem;">${plan.arrivalText}</div>
+                <div style="flex: 1.2; text-align: right; font-family: monospace; font-size: 1.05rem;" class="dest-time">${plan.destText}</div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    let manualMode = null;
+    let globalDataMap = null;
+
+    async function setMode(mode) {
+        if (manualMode === mode) return;
+        manualMode = mode;
+        isMorning = (mode === 'morning');
+        
+        // Optimistic UI update for snappy feel
+        document.getElementById('toggle-container').setAttribute('data-mode', mode);
+        if (mode === 'morning') {
+            document.getElementById('toggle-morning').classList.add('active');
+            document.getElementById('toggle-afternoon').classList.remove('active');
+        } else {
+            document.getElementById('toggle-afternoon').classList.add('active');
+            document.getElementById('toggle-morning').classList.remove('active');
+        }
+        
+        if (globalDataMap) {
+            document.getElementById('page-title').innerText = isMorning ? '通勤去程 (上班)' : '通勤回程 (下班)';
+            let currentPlans = isMorning ? [...plans.morning] : [...plans.afternoon];
+            
+            document.getElementById('time-indicator').innerText = '正在計算路況...';
+            await enrichPlansWithGoogleTime(currentPlans);
+            
+            const modeDataMap = {
+                bus_57: isMorning ? globalDataMap.bus_57_morn : globalDataMap.bus_57_aft,
+                bus_897: isMorning ? globalDataMap.bus_897_morn : globalDataMap.bus_897_aft,
+                ubikeData: globalDataMap.ubikeData
+            };
+            
+            renderCards(modeDataMap, currentPlans);
+            document.getElementById('time-indicator').innerText = '即時動態已切換';
+        } else {
+            updateDashboard();
+        }
+    }
+
+    async function updateDashboard() {
+        try {
+            const now = new Date();
+            
+            if (manualMode) {
+                isMorning = (manualMode === 'morning');
+            } else {
+                isMorning = now.getHours() < 12;
+                
+                // Set initial visual toggle state
+                const modeStr = isMorning ? 'morning' : 'afternoon';
+                document.getElementById('toggle-container').setAttribute('data-mode', modeStr);
+                if (isMorning) {
+                    document.getElementById('toggle-morning').classList.add('active');
+                    document.getElementById('toggle-afternoon').classList.remove('active');
+                } else {
+                    document.getElementById('toggle-afternoon').classList.add('active');
+                    document.getElementById('toggle-morning').classList.remove('active');
+                }
+            }
+
+            document.getElementById('page-title').innerText = isMorning ? '通勤去程 (上班)' : '通勤回程 (下班)';
+            document.getElementById('time-indicator').innerText = '正在更新即時動態...';
+            document.getElementById('error-container').style.display = 'none';
+
+            const token = await getAuthToken();
+            globalDataMap = {};
+            
+            // Collect all unique Ubike IDs needed for ALL plans (both morning and afternoon)
+            const ubikeIdsSet = new Set();
+            [...plans.morning, ...plans.afternoon].forEach(p => {
+                if (p.ubikeStart) ubikeIdsSet.add(p.ubikeStart);
+                if (p.ubikeDest) ubikeIdsSet.add(p.ubikeDest);
+                if (p.ubikeStartBackup) ubikeIdsSet.add(p.ubikeStartBackup);
+                if (p.ubikeDestBackup) ubikeIdsSet.add(p.ubikeDestBackup);
+            });
+            const ubikeIds = Array.from(ubikeIdsSet);
+
+            // 1. Fetch TDX Data for BOTH directions (Batched)
+            const [eta57, eta897, ubikeData] = await Promise.all([
+                fetchRouteETA(token, 'NewTaipei', '57'),
+                fetchRouteETA(token, 'NewTaipei', '897'),
+                fetchUbikes(token, ubikeIds)
+            ]);
+
+            const [b57m, b57a, b897m, b897a] = await Promise.all([
+                processBusStopETA(eta57, 'NewTaipei', '57', BUS_57_HOME, token),
+                processBusStopETA(eta57, 'NewTaipei', '57', BUS_57_CO, token),
+                processBusStopETA(eta897, 'NewTaipei', '897', BUS_897_HOME, token),
+                processBusStopETA(eta897, 'NewTaipei', '897', BUS_897_CO, token)
+            ]);
+
+            globalDataMap = {
+                bus_57_morn: b57m, bus_57_aft: b57a,
+                bus_897_morn: b897m, bus_897_aft: b897a,
+                ubikeData: ubikeData
+            };
+
+            let currentPlans = isMorning ? [...plans.morning] : [...plans.afternoon];
+
+            // 2. Fetch Google Maps Travel Time for ACTIVE mode only
+            googleApiStatus = 'unknown';
+            await enrichPlansWithGoogleTime(currentPlans);
+
+            // 3. Render
+            const modeDataMap = {
+                bus_57: isMorning ? globalDataMap.bus_57_morn : globalDataMap.bus_57_aft,
+                bus_897: isMorning ? globalDataMap.bus_897_morn : globalDataMap.bus_897_aft,
+                ubikeData: globalDataMap.ubikeData
+            };
+            renderCards(modeDataMap, currentPlans);
+
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('update-time').innerText = `${hh}:${mm}:${ss}`;
+            document.getElementById('time-indicator').innerText = '即時動態已更新';
+            
+            const apiStatusEl = document.getElementById('google-api-status');
+            if (googleApiStatus === 'ok') {
+                apiStatusEl.innerHTML = '<span style="color: var(--success);">✓ 抵達時間已結合 Google Maps API 即時路況</span>';
+            } else {
+                apiStatusEl.innerHTML = '<span style="color: var(--warning);">⚠ Google API 尚未連線或發生錯誤，目前使用預設車程</span>';
+            }
+
+        } catch (err) {
+            console.error(err);
+            document.getElementById('error-container').innerText = '更新失敗，請檢查網路連線或 API 狀態。';
+            document.getElementById('error-container').style.display = 'block';
+            document.getElementById('time-indicator').innerText = '更新失敗';
+        }
+    }
+
+    // Dynamic Script Loading and Init Logic
+    function loadGoogleMapsApi(apiKey) {
+        return new Promise((resolve, reject) => {
+            if (window.google && window.google.maps) {
+                resolve();
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+            script.async = true;
+            script.defer = true;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    function saveKeysAndStart() {
+        const gmaps = document.getElementById('input-gmaps').value.trim();
+        const tdxId = document.getElementById('input-tdx-id').value.trim();
+        const tdxSecret = document.getElementById('input-tdx-secret').value.trim();
+        
+        if (!gmaps || !tdxId || !tdxSecret) {
+            alert('請填寫所有金鑰欄位！');
+            return;
+        }
+        
+        localStorage.setItem('GMAPS_KEY', gmaps);
+        localStorage.setItem('TDX_ID', tdxId);
+        localStorage.setItem('TDX_SECRET', tdxSecret);
+        
+        document.getElementById('setup-container').style.display = 'none';
+        document.getElementById('options-container').style.display = 'block';
+        
+        startDashboard();
+    }
+
+    async function startDashboard() {
+        try {
+            const gmapsKey = localStorage.getItem('GMAPS_KEY');
+            await loadGoogleMapsApi(gmapsKey);
+        } catch (e) {
+            console.error("Failed to load Google Maps API", e);
+            googleApiStatus = 'error';
+        }
+        
+        updateDashboard();
+        setInterval(updateDashboard, 60000);
+    }
+
+    function initApp() {
+        const gmapsKey = localStorage.getItem('GMAPS_KEY');
+        const tdxId = localStorage.getItem('TDX_ID');
+        const tdxSecret = localStorage.getItem('TDX_SECRET');
+        
+        if (!gmapsKey || !tdxId || !tdxSecret) {
+            // Show setup UI
+            document.getElementById('setup-container').style.display = 'block';
+            document.getElementById('options-container').style.display = 'none';
+        } else {
+            // Start normally
+            document.getElementById('options-container').style.display = 'block';
+            startDashboard();
+        }
+    }
+
+    // Init
+    initApp();
+
+</script>
+</body>
+</html>
